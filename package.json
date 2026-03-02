@@ -1,4 +1,11 @@
 {
+  "name": "olengbeach-welcome",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
   "dependencies": {
     "@napi-rs/canvas": "^0.1.95",
     "discord.js": "^14.25.1",
