@@ -43,7 +43,7 @@ const client = new Client({
 function fitText(ctx, text, maxWidth, startSize = 68, minSize = 18, weight = "bold") {
   let size = startSize;
   while (size >= minSize) {
-    ctx.font = `${weight} ${size}px Sans`;
+    ctx.font = `${weight} ${size}px Arial`;
     if (ctx.measureText(text).width <= maxWidth) return size;
     size -= 2;
   }
@@ -51,27 +51,34 @@ function fitText(ctx, text, maxWidth, startSize = 68, minSize = 18, weight = "bo
 }
 
 function roundRect(ctx, x, y, w, h, r) {
+  const radius = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + w - radius, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+  ctx.lineTo(x + w, y + h - radius);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+  ctx.lineTo(x + radius, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
   ctx.closePath();
 }
 
 function sanitizeUsername(name) {
-  return String(name || "Unknown User").replace(/[`*_~|>]/g, "").slice(0, 32);
+  return String(name || "Unknown User")
+    .replace(/[`*_~|>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 32);
 }
 
 async function safeLoadBackground(url, width, height) {
   try {
     return await loadImage(url);
-  } catch {
+  } catch (error) {
+    console.warn("Failed to load background, using fallback:", error?.message || error);
+
     const fallback = createCanvas(width, height);
     const ctx = fallback.getContext("2d");
 
@@ -86,13 +93,38 @@ async function safeLoadBackground(url, width, height) {
   }
 }
 
+async function safeLoadAvatar(avatarUrl, size = 256) {
+  try {
+    return await loadImage(avatarUrl);
+  } catch (error) {
+    console.warn("Failed to load avatar, using fallback:", error?.message || error);
+
+    const fallback = createCanvas(size, size);
+    const ctx = fallback.getContext("2d");
+
+    const grad = ctx.createLinearGradient(0, 0, size, size);
+    grad.addColorStop(0, "#334155");
+    grad.addColorStop(1, "#0f172a");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+
+    ctx.fillStyle = "rgba(255,255,255,0.9)";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "bold 96px Arial";
+    ctx.fillText("?", size / 2, size / 2 + 6);
+
+    return fallback;
+  }
+}
+
 function drawBadge(ctx, text, x, y, fill = "rgba(255,255,255,0.12)") {
-  ctx.font = "bold 22px Sans";
+  ctx.save();
+  ctx.font = "bold 22px Arial";
   const paddingX = 18;
-  const paddingY = 12;
+  const boxH = 44;
   const textWidth = ctx.measureText(text).width;
   const boxW = textWidth + paddingX * 2;
-  const boxH = 44;
 
   ctx.fillStyle = fill;
   roundRect(ctx, x, y, boxW, boxH, 14);
@@ -101,55 +133,77 @@ function drawBadge(ctx, text, x, y, fill = "rgba(255,255,255,0.12)") {
   ctx.fillStyle = "#ffffff";
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.fillText(text, x + paddingX, y + boxH / 2);
+  ctx.fillText(text, x + paddingX, y + boxH / 2 + 1);
+  ctx.restore();
 }
 
-async function createCard({
-  username,
-  avatarUrl,
-  mode = "welcome",
-}) {
+function drawCenteredText(ctx, text, x, y, options = {}) {
+  const {
+    font = "bold 60px Arial",
+    fillStyle = "#ffffff",
+    strokeStyle = "rgba(0,0,0,0.65)",
+    lineWidth = 8,
+  } = options;
+
+  ctx.save();
+  ctx.font = font;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineWidth = lineWidth;
+  ctx.strokeStyle = strokeStyle;
+  ctx.fillStyle = fillStyle;
+  ctx.strokeText(text, x, y);
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+
+async function createCard({ username, avatarUrl, mode = "welcome" }) {
   const width = 1280;
   const height = 720;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext("2d");
 
+  console.log("Rendering card:", { username, mode });
+
   const bgUrl = mode === "welcome" ? WELCOME_BG_URL : GOODBYE_BG_URL;
+  const accent = mode === "welcome" ? "#22c55e" : "#ef4444";
+  const titleText = mode === "welcome" ? "WELCOME" : "GOODBYE";
+
+  // Background
   const bg = await safeLoadBackground(bgUrl, width, height);
   ctx.drawImage(bg, 0, 0, width, height);
 
-  // Overlay gelap
+  // Dark overlay
   const overlay = ctx.createLinearGradient(0, 0, 0, height);
   overlay.addColorStop(0, "rgba(0,0,0,0.20)");
   overlay.addColorStop(0.55, "rgba(0,0,0,0.35)");
-  overlay.addColorStop(1, "rgba(0,0,0,0.70)");
+  overlay.addColorStop(1, "rgba(0,0,0,0.72)");
   ctx.fillStyle = overlay;
   ctx.fillRect(0, 0, width, height);
 
-  // Soft vignette
+  // Vignette
   const vignette = ctx.createRadialGradient(
     width / 2,
     height / 2,
     100,
     width / 2,
     height / 2,
-    700
+    760
   );
-  vignette.addColorStop(0, "rgba(255,255,255,0.02)");
-  vignette.addColorStop(1, "rgba(0,0,0,0.48)");
+  vignette.addColorStop(0, "rgba(255,255,255,0.03)");
+  vignette.addColorStop(1, "rgba(0,0,0,0.5)");
   ctx.fillStyle = vignette;
   ctx.fillRect(0, 0, width, height);
 
   // Frame
-  ctx.strokeStyle = "rgba(255,255,255,0.08)";
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,255,255,0.10)";
   ctx.lineWidth = 2;
   roundRect(ctx, 28, 28, width - 56, height - 56, 28);
   ctx.stroke();
+  ctx.restore();
 
-  const accent = mode === "welcome" ? "#22c55e" : "#ef4444";
-  const titleText = mode === "welcome" ? "WELCOME" : "GOODBYE";
-
-  // badge kiri atas
+  // Badge
   drawBadge(
     ctx,
     mode === "welcome" ? "NEW MEMBER" : "MEMBER LEFT",
@@ -160,76 +214,86 @@ async function createCard({
       : "rgba(239,68,68,0.18)"
   );
 
-  // server name atas tengah
+  // Server name
+  ctx.save();
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
-  ctx.font = "bold 38px Sans";
-  ctx.fillStyle = "rgba(255,255,255,0.96)";
+  ctx.font = "bold 38px Arial";
+  ctx.fillStyle = "rgba(255,255,255,0.97)";
   ctx.fillText(SERVER_NAME, width / 2, 55);
+  ctx.restore();
 
-  // avatar
-  const avatar = await loadImage(avatarUrl);
+  // Avatar
+  const avatar = await safeLoadAvatar(avatarUrl, 512);
   const avatarSize = 220;
   const avatarX = width / 2 - avatarSize / 2;
   const avatarY = 130;
+  const avatarCenterX = width / 2;
+  const avatarCenterY = avatarY + avatarSize / 2;
 
-  // glow
+  // Avatar glow
   ctx.save();
   ctx.shadowColor = accent;
   ctx.shadowBlur = 45;
   ctx.beginPath();
-  ctx.arc(width / 2, avatarY + avatarSize / 2, avatarSize / 2 + 12, 0, Math.PI * 2);
+  ctx.arc(avatarCenterX, avatarCenterY, avatarSize / 2 + 12, 0, Math.PI * 2);
   ctx.fillStyle = "rgba(255,255,255,0.10)";
   ctx.fill();
   ctx.restore();
 
-  // lingkar avatar
+  // Avatar circle
   ctx.save();
   ctx.beginPath();
-  ctx.arc(width / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
+  ctx.arc(avatarCenterX, avatarCenterY, avatarSize / 2, 0, Math.PI * 2);
   ctx.closePath();
   ctx.clip();
   ctx.drawImage(avatar, avatarX, avatarY, avatarSize, avatarSize);
   ctx.restore();
 
-  // border avatar
+  // Avatar border
+  ctx.save();
   ctx.beginPath();
-  ctx.arc(width / 2, avatarY + avatarSize / 2, avatarSize / 2 + 6, 0, Math.PI * 2);
+  ctx.arc(avatarCenterX, avatarCenterY, avatarSize / 2 + 6, 0, Math.PI * 2);
   ctx.lineWidth = 10;
   ctx.strokeStyle = "#ffffff";
   ctx.stroke();
+  ctx.restore();
 
-  // title besar
-  ctx.textAlign = "center";
-  ctx.textBaseline = "alphabetic";
-  ctx.font = "bold 98px Sans";
-  ctx.lineWidth = 10;
-  ctx.strokeStyle = "rgba(0,0,0,0.55)";
-  ctx.fillStyle = "#ffffff";
-  ctx.strokeText(titleText, width / 2, 500);
-  ctx.fillText(titleText, width / 2, 500);
+  // Main title
+  drawCenteredText(ctx, titleText, width / 2, 470, {
+    font: "bold 96px Arial",
+    fillStyle: "#ffffff",
+    strokeStyle: "rgba(0,0,0,0.75)",
+    lineWidth: 12,
+  });
 
-  // username
+  // Username
   const safeName = sanitizeUsername(username);
-  const usernameFont = fitText(ctx, safeName, 800, 54, 20, "bold");
-  ctx.font = `bold ${usernameFont}px Sans`;
-  ctx.lineWidth = 8;
-  ctx.strokeStyle = "rgba(0,0,0,0.55)";
-  ctx.fillStyle = "#f8fafc";
-  ctx.strokeText(safeName, width / 2, 565);
-  ctx.fillText(safeName, width / 2, 565);
+  const usernameFont = fitText(ctx, safeName, 860, 58, 22, "bold");
 
-  // garis bawah
+  drawCenteredText(ctx, safeName, width / 2, 550, {
+    font: `bold ${usernameFont}px Arial`,
+    fillStyle: "#f8fafc",
+    strokeStyle: "rgba(0,0,0,0.75)",
+    lineWidth: 8,
+  });
+
+  // Accent line
+  ctx.save();
   ctx.strokeStyle = accent;
   ctx.lineWidth = 6;
   ctx.beginPath();
   ctx.moveTo(width / 2 - 170, 595);
   ctx.lineTo(width / 2 + 170, 595);
   ctx.stroke();
+  ctx.restore();
 
-  // sub text
-  ctx.font = "28px Sans";
-  ctx.fillStyle = "rgba(255,255,255,0.92)";
+  // Sub text
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = "28px Arial";
+  ctx.fillStyle = "rgba(255,255,255,0.94)";
   ctx.fillText(
     mode === "welcome"
       ? `Senang kamu bergabung di ${SERVER_NAME}!`
@@ -237,6 +301,7 @@ async function createCard({
     width / 2,
     645
   );
+  ctx.restore();
 
   return canvas.encode("png");
 }
@@ -263,20 +328,18 @@ function buildGoodbyeMessage(user) {
   ].join("\n");
 }
 
-async function sendCard({
-  channelId,
-  content,
-  username,
-  avatarUrl,
-  mode,
-}) {
+async function sendCard({ channelId, content, username, avatarUrl, mode }) {
   const channel = await client.channels.fetch(channelId).catch(() => null);
-  if (!channel) return;
+  if (!channel) {
+    console.warn(`Channel not found: ${channelId}`);
+    return;
+  }
 
   if (
     channel.type !== ChannelType.GuildText &&
     channel.type !== ChannelType.GuildAnnouncement
   ) {
+    console.warn(`Invalid channel type for ${channelId}: ${channel.type}`);
     return;
   }
 
@@ -298,6 +361,7 @@ async function sendCard({
 
 // ========= EVENTS =========
 client.once("ready", () => {
+  console.log("INDEX.JS VERSI BARU KELOAD");
   console.log(`Logged in as ${client.user.tag}`);
 });
 
