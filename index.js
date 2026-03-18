@@ -1,0 +1,354 @@
+import "dotenv/config";
+import {
+  AttachmentBuilder,
+  ChannelType,
+  Client,
+  GatewayIntentBits,
+} from "discord.js";
+import { createCanvas, loadImage } from "@napi-rs/canvas";
+
+// ========= CONFIG =========
+const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
+
+const WELCOME_CHANNEL_ID = process.env.WELCOME_CHANNEL_ID;
+const GOODBYE_CHANNEL_ID = process.env.GOODBYE_CHANNEL_ID;
+
+const ORDER_CHANNEL_ID = process.env.ORDER_CHANNEL_ID;
+const MAP_CHANNEL_ID = process.env.MAP_CHANNEL_ID;
+const COMMUNITY_CHANNEL_ID = process.env.COMMUNITY_CHANNEL_ID;
+
+const SERVER_NAME = process.env.SERVER_NAME || "OLENG BEACH";
+
+const WELCOME_BG_URL =
+  process.env.WELCOME_BG_URL ||
+  "https://images.unsplash.com/photo-1519608487953-e999c86e7455?q=80&w=1600&auto=format&fit=crop";
+
+const GOODBYE_BG_URL =
+  process.env.GOODBYE_BG_URL ||
+  "https://images.unsplash.com/photo-1519608487953-e999c86e7455?q=80&w=1600&auto=format&fit=crop";
+
+if (!DISCORD_TOKEN) throw new Error("Missing DISCORD_TOKEN");
+if (!WELCOME_CHANNEL_ID) throw new Error("Missing WELCOME_CHANNEL_ID");
+if (!GOODBYE_CHANNEL_ID) throw new Error("Missing GOODBYE_CHANNEL_ID");
+if (!ORDER_CHANNEL_ID) throw new Error("Missing ORDER_CHANNEL_ID");
+if (!MAP_CHANNEL_ID) throw new Error("Missing MAP_CHANNEL_ID");
+if (!COMMUNITY_CHANNEL_ID) throw new Error("Missing COMMUNITY_CHANNEL_ID");
+
+// ========= CLIENT =========
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
+});
+
+// ========= HELPERS =========
+function fitText(ctx, text, maxWidth, startSize = 68, minSize = 18, weight = "bold") {
+  let size = startSize;
+  while (size >= minSize) {
+    ctx.font = `${weight} ${size}px Sans`;
+    if (ctx.measureText(text).width <= maxWidth) return size;
+    size -= 2;
+  }
+  return minSize;
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function sanitizeUsername(name) {
+  return String(name || "Unknown User").replace(/[`*_~|>]/g, "").slice(0, 32);
+}
+
+async function safeLoadBackground(url, width, height) {
+  try {
+    return await loadImage(url);
+  } catch {
+    const fallback = createCanvas(width, height);
+    const ctx = fallback.getContext("2d");
+
+    const grad = ctx.createLinearGradient(0, 0, width, height);
+    grad.addColorStop(0, "#0f172a");
+    grad.addColorStop(0.5, "#13293d");
+    grad.addColorStop(1, "#111827");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, width, height);
+
+    return fallback;
+  }
+}
+
+function drawBadge(ctx, text, x, y, fill = "rgba(255,255,255,0.12)") {
+  ctx.font = "bold 22px Sans";
+  const paddingX = 18;
+  const paddingY = 12;
+  const textWidth = ctx.measureText(text).width;
+  const boxW = textWidth + paddingX * 2;
+  const boxH = 44;
+
+  ctx.fillStyle = fill;
+  roundRect(ctx, x, y, boxW, boxH, 14);
+  ctx.fill();
+
+  ctx.fillStyle = "#ffffff";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, x + paddingX, y + boxH / 2);
+}
+
+async function createCard({
+  username,
+  avatarUrl,
+  mode = "welcome",
+}) {
+  const width = 1280;
+  const height = 720;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext("2d");
+
+  const bgUrl = mode === "welcome" ? WELCOME_BG_URL : GOODBYE_BG_URL;
+  const bg = await safeLoadBackground(bgUrl, width, height);
+  ctx.drawImage(bg, 0, 0, width, height);
+
+  // Overlay gelap
+  const overlay = ctx.createLinearGradient(0, 0, 0, height);
+  overlay.addColorStop(0, "rgba(0,0,0,0.20)");
+  overlay.addColorStop(0.55, "rgba(0,0,0,0.35)");
+  overlay.addColorStop(1, "rgba(0,0,0,0.70)");
+  ctx.fillStyle = overlay;
+  ctx.fillRect(0, 0, width, height);
+
+  // Soft vignette
+  const vignette = ctx.createRadialGradient(
+    width / 2,
+    height / 2,
+    100,
+    width / 2,
+    height / 2,
+    700
+  );
+  vignette.addColorStop(0, "rgba(255,255,255,0.02)");
+  vignette.addColorStop(1, "rgba(0,0,0,0.48)");
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, width, height);
+
+  // Frame
+  ctx.strokeStyle = "rgba(255,255,255,0.08)";
+  ctx.lineWidth = 2;
+  roundRect(ctx, 28, 28, width - 56, height - 56, 28);
+  ctx.stroke();
+
+  const accent = mode === "welcome" ? "#22c55e" : "#ef4444";
+  const titleText = mode === "welcome" ? "WELCOME" : "GOODBYE";
+
+  // badge kiri atas
+  drawBadge(
+    ctx,
+    mode === "welcome" ? "NEW MEMBER" : "MEMBER LEFT",
+    55,
+    50,
+    mode === "welcome"
+      ? "rgba(34,197,94,0.18)"
+      : "rgba(239,68,68,0.18)"
+  );
+
+  // server name atas tengah
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.font = "bold 38px Sans";
+  ctx.fillStyle = "rgba(255,255,255,0.96)";
+  ctx.fillText(SERVER_NAME, width / 2, 55);
+
+  // avatar
+  const avatar = await loadImage(avatarUrl);
+  const avatarSize = 220;
+  const avatarX = width / 2 - avatarSize / 2;
+  const avatarY = 130;
+
+  // glow
+  ctx.save();
+  ctx.shadowColor = accent;
+  ctx.shadowBlur = 45;
+  ctx.beginPath();
+  ctx.arc(width / 2, avatarY + avatarSize / 2, avatarSize / 2 + 12, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(255,255,255,0.10)";
+  ctx.fill();
+  ctx.restore();
+
+  // lingkar avatar
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(width / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
+  ctx.closePath();
+  ctx.clip();
+  ctx.drawImage(avatar, avatarX, avatarY, avatarSize, avatarSize);
+  ctx.restore();
+
+  // border avatar
+  ctx.beginPath();
+  ctx.arc(width / 2, avatarY + avatarSize / 2, avatarSize / 2 + 6, 0, Math.PI * 2);
+  ctx.lineWidth = 10;
+  ctx.strokeStyle = "#ffffff";
+  ctx.stroke();
+
+  // title besar
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.font = "bold 98px Sans";
+  ctx.lineWidth = 10;
+  ctx.strokeStyle = "rgba(0,0,0,0.55)";
+  ctx.fillStyle = "#ffffff";
+  ctx.strokeText(titleText, width / 2, 500);
+  ctx.fillText(titleText, width / 2, 500);
+
+  // username
+  const safeName = sanitizeUsername(username);
+  const usernameFont = fitText(ctx, safeName, 800, 54, 20, "bold");
+  ctx.font = `bold ${usernameFont}px Sans`;
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = "rgba(0,0,0,0.55)";
+  ctx.fillStyle = "#f8fafc";
+  ctx.strokeText(safeName, width / 2, 565);
+  ctx.fillText(safeName, width / 2, 565);
+
+  // garis bawah
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(width / 2 - 170, 595);
+  ctx.lineTo(width / 2 + 170, 595);
+  ctx.stroke();
+
+  // sub text
+  ctx.font = "28px Sans";
+  ctx.fillStyle = "rgba(255,255,255,0.92)";
+  ctx.fillText(
+    mode === "welcome"
+      ? `Senang kamu bergabung di ${SERVER_NAME}!`
+      : `Terima kasih sudah pernah bergabung di ${SERVER_NAME}!`,
+    width / 2,
+    645
+  );
+
+  return canvas.encode("png");
+}
+
+function buildWelcomeMessage(member) {
+  return [
+    `🎉 **Selamat datang di ${SERVER_NAME}** ${member}`,
+    "",
+    `1️⃣ Order Robux di <#${ORDER_CHANNEL_ID}>`,
+    `2️⃣ Join Map di <#${MAP_CHANNEL_ID}>`,
+    `3️⃣ Join Komunitas di <#${COMMUNITY_CHANNEL_ID}>`,
+    "",
+  ].join("\n");
+}
+
+function buildGoodbyeMessage(user) {
+  return [
+    `😢 **Selamat tinggal dari ${SERVER_NAME}** <@${user.id}>`,
+    "",
+    `1️⃣ Kalau mau balik lagi, cek <#${ORDER_CHANNEL_ID}>`,
+    `2️⃣ Main bareng lagi di <#${MAP_CHANNEL_ID}>`,
+    `3️⃣ Join lagi komunitas di <#${COMMUNITY_CHANNEL_ID}>`,
+    "",
+  ].join("\n");
+}
+
+async function sendCard({
+  channelId,
+  content,
+  username,
+  avatarUrl,
+  mode,
+}) {
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+  if (!channel) return;
+
+  if (
+    channel.type !== ChannelType.GuildText &&
+    channel.type !== ChannelType.GuildAnnouncement
+  ) {
+    return;
+  }
+
+  const buffer = await createCard({
+    username,
+    avatarUrl,
+    mode,
+  });
+
+  const attachment = new AttachmentBuilder(buffer, {
+    name: `${mode}-${Date.now()}.png`,
+  });
+
+  await channel.send({
+    content,
+    files: [attachment],
+  });
+}
+
+// ========= EVENTS =========
+client.once("ready", () => {
+  console.log(`Logged in as ${client.user.tag}`);
+});
+
+client.on("guildMemberAdd", async (member) => {
+  try {
+    const username =
+      member.user.globalName ||
+      member.displayName ||
+      member.user.username;
+
+    const avatarUrl = member.user.displayAvatarURL({
+      extension: "png",
+      size: 512,
+      forceStatic: true,
+    });
+
+    await sendCard({
+      channelId: WELCOME_CHANNEL_ID,
+      content: buildWelcomeMessage(member),
+      username,
+      avatarUrl,
+      mode: "welcome",
+    });
+  } catch (error) {
+    console.error("guildMemberAdd error:", error);
+  }
+});
+
+client.on("guildMemberRemove", async (member) => {
+  try {
+    const username =
+      member.user.globalName ||
+      member.displayName ||
+      member.user.username;
+
+    const avatarUrl = member.user.displayAvatarURL({
+      extension: "png",
+      size: 512,
+      forceStatic: true,
+    });
+
+    await sendCard({
+      channelId: GOODBYE_CHANNEL_ID,
+      content: buildGoodbyeMessage(member.user),
+      username,
+      avatarUrl,
+      mode: "goodbye",
+    });
+  } catch (error) {
+    console.error("guildMemberRemove error:", error);
+  }
+});
+
+client.login(DISCORD_TOKEN);
