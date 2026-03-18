@@ -1,8 +1,14 @@
 {
+  "name": "oleng-welcome-goodbye-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
   "dependencies": {
-    "@napi-rs/canvas": "^0.1.97",
-    "discord.js": "^14.25.1",
-    "dotenv": "^17.3.1",
-    "pdfkit": "^0.17.2"
+    "@napi-rs/canvas": "^0.1.63",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5"
   }
 }
