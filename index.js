@@ -1,11 +1,32 @@
 import "dotenv/config";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   AttachmentBuilder,
   ChannelType,
   Client,
   GatewayIntentBits,
 } from "discord.js";
-import { createCanvas, loadImage } from "@napi-rs/canvas";
+import { createCanvas, loadImage, GlobalFonts } from "@napi-rs/canvas";
+
+// ========= PATH =========
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// ========= REGISTER FONTS =========
+const regularFontPath = path.join(__dirname, "assets/fonts/Poppins-Regular.ttf");
+const boldFontPath = path.join(__dirname, "assets/fonts/Poppins-Bold.ttf");
+
+const regularRegistered = GlobalFonts.registerFromPath(regularFontPath, "Poppins");
+const boldRegistered = GlobalFonts.registerFromPath(boldFontPath, "Poppins Bold");
+
+console.log("Font registered:", {
+  regularFontPath,
+  boldFontPath,
+  regularRegistered,
+  boldRegistered,
+  families: GlobalFonts.families,
+});
 
 // ========= CONFIG =========
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
@@ -40,13 +61,20 @@ const client = new Client({
 });
 
 // ========= HELPERS =========
+function getFontFamily(weight = "regular") {
+  return weight === "bold" ? '"Poppins Bold"' : '"Poppins"';
+}
+
 function fitText(ctx, text, maxWidth, startSize = 68, minSize = 18, weight = "bold") {
   let size = startSize;
+  const family = getFontFamily(weight);
+
   while (size >= minSize) {
-    ctx.font = `${weight} ${size}px Arial`;
+    ctx.font = `${size}px ${family}`;
     if (ctx.measureText(text).width <= maxWidth) return size;
     size -= 2;
   }
+
   return minSize;
 }
 
@@ -111,7 +139,7 @@ async function safeLoadAvatar(avatarUrl, size = 256) {
     ctx.fillStyle = "rgba(255,255,255,0.9)";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.font = "bold 96px Arial";
+    ctx.font = `96px ${getFontFamily("bold")}`;
     ctx.fillText("?", size / 2, size / 2 + 6);
 
     return fallback;
@@ -120,7 +148,8 @@ async function safeLoadAvatar(avatarUrl, size = 256) {
 
 function drawBadge(ctx, text, x, y, fill = "rgba(255,255,255,0.12)") {
   ctx.save();
-  ctx.font = "bold 22px Arial";
+  ctx.font = `22px ${getFontFamily("bold")}`;
+
   const paddingX = 18;
   const boxH = 44;
   const textWidth = ctx.measureText(text).width;
@@ -139,7 +168,7 @@ function drawBadge(ctx, text, x, y, fill = "rgba(255,255,255,0.12)") {
 
 function drawCenteredText(ctx, text, x, y, options = {}) {
   const {
-    font = "bold 60px Arial",
+    font = `60px ${getFontFamily("bold")}`,
     fillStyle = "#ffffff",
     strokeStyle = "rgba(0,0,0,0.65)",
     lineWidth = 8,
@@ -218,7 +247,7 @@ async function createCard({ username, avatarUrl, mode = "welcome" }) {
   ctx.save();
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
-  ctx.font = "bold 38px Arial";
+  ctx.font = `38px ${getFontFamily("bold")}`;
   ctx.fillStyle = "rgba(255,255,255,0.97)";
   ctx.fillText(SERVER_NAME, width / 2, 55);
   ctx.restore();
@@ -261,7 +290,7 @@ async function createCard({ username, avatarUrl, mode = "welcome" }) {
 
   // Main title
   drawCenteredText(ctx, titleText, width / 2, 470, {
-    font: "bold 96px Arial",
+    font: `96px ${getFontFamily("bold")}`,
     fillStyle: "#ffffff",
     strokeStyle: "rgba(0,0,0,0.75)",
     lineWidth: 12,
@@ -272,7 +301,7 @@ async function createCard({ username, avatarUrl, mode = "welcome" }) {
   const usernameFont = fitText(ctx, safeName, 860, 58, 22, "bold");
 
   drawCenteredText(ctx, safeName, width / 2, 550, {
-    font: `bold ${usernameFont}px Arial`,
+    font: `${usernameFont}px ${getFontFamily("bold")}`,
     fillStyle: "#f8fafc",
     strokeStyle: "rgba(0,0,0,0.75)",
     lineWidth: 8,
@@ -292,7 +321,7 @@ async function createCard({ username, avatarUrl, mode = "welcome" }) {
   ctx.save();
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.font = "28px Arial";
+  ctx.font = `28px ${getFontFamily("regular")}`;
   ctx.fillStyle = "rgba(255,255,255,0.94)";
   ctx.fillText(
     mode === "welcome"
@@ -329,7 +358,13 @@ function buildGoodbyeMessage(user) {
 }
 
 async function sendCard({ channelId, content, username, avatarUrl, mode }) {
-  const channel = await client.channels.fetch(channelId).catch(() => null);
+  console.log("sendCard called:", { channelId, username, mode });
+
+  const channel = await client.channels.fetch(channelId).catch((err) => {
+    console.error("Failed to fetch channel:", channelId, err);
+    return null;
+  });
+
   if (!channel) {
     console.warn(`Channel not found: ${channelId}`);
     return;
@@ -342,6 +377,15 @@ async function sendCard({ channelId, content, username, avatarUrl, mode }) {
     console.warn(`Invalid channel type for ${channelId}: ${channel.type}`);
     return;
   }
+
+  const permissions = channel.permissionsFor(client.user);
+  console.log("Bot permissions:", {
+    channelId,
+    viewChannel: permissions?.has("ViewChannel"),
+    sendMessages: permissions?.has("SendMessages"),
+    attachFiles: permissions?.has("AttachFiles"),
+    embedLinks: permissions?.has("EmbedLinks"),
+  });
 
   const buffer = await createCard({
     username,
@@ -366,6 +410,8 @@ client.once("ready", () => {
 });
 
 client.on("guildMemberAdd", async (member) => {
+  console.log("MEMBER JOIN DETECTED:", member.user.tag);
+
   try {
     const username =
       member.user.globalName ||
@@ -391,6 +437,8 @@ client.on("guildMemberAdd", async (member) => {
 });
 
 client.on("guildMemberRemove", async (member) => {
+  console.log("MEMBER LEAVE DETECTED:", member.user.tag);
+
   try {
     const username =
       member.user.globalName ||
