@@ -38,15 +38,15 @@ const ORDER_CHANNEL_ID = process.env.ORDER_CHANNEL_ID;
 const MAP_CHANNEL_ID = process.env.MAP_CHANNEL_ID;
 const COMMUNITY_CHANNEL_ID = process.env.COMMUNITY_CHANNEL_ID;
 
-const SERVER_NAME = process.env.SERVER_NAME || "OLENG BEACH";
+const SERVER_NAME = process.env.SERVER_NAME || "UNDERCOVER";
 
 const WELCOME_BG_URL =
   process.env.WELCOME_BG_URL ||
-  "https://images.unsplash.com/photo-1519608487953-e999c86e7455?q=80&w=1600&auto=format&fit=crop";
+  "https://i.ibb.co.com/WJ6WwCp/fcc366e7-6a39-4fcd-a85a-6163b7ac3796.png";
 
 const GOODBYE_BG_URL =
   process.env.GOODBYE_BG_URL ||
-  "https://images.unsplash.com/photo-1519608487953-e999c86e7455?q=80&w=1600&auto=format&fit=crop";
+  "https://i.ibb.co.com/WJ6WwCp/fcc366e7-6a39-4fcd-a85a-6163b7ac3796.png";
 
 if (!DISCORD_TOKEN) throw new Error("Missing DISCORD_TOKEN");
 if (!WELCOME_CHANNEL_ID) throw new Error("Missing WELCOME_CHANNEL_ID");
